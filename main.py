@@ -300,4 +300,30 @@ class FunctionSpace(object)
         integral(f*phi) or
         integral(f*dphi)
     """
-    def __init__
+    def __init__(self, mesh,sfns):
+        """
+        mesh is a Mesh class
+        sfns is a Shapefns class
+        """
+        self.__size=mesh.size()
+        # number the elements in the same was as mesh
+        self.__elts = list([])
+        self.__dofpts = list([])
+        self.__nDOFs=0
+        for n in range(self.__size):
+            #ASSUMing only boundary points are number 0 and (self.__size)
+            if n==0:
+                self.__nDOFs += 3
+                dofs=[2*n, 2*n+1,2*n+2]
+                newdofs = range(1,3)
+            else:
+                self.__nDOFs +=2
+                dofs=[2*n, 2*n+1, 2*n+2]
+                newdofs = range(1,3)
+            fe = FiniteElement(mesh,sfns,n,dofs)
+            self.__elts.append(fe)
+            for i in newdofs:
+                self.__dofpts.append(fe.dofpts()[i])
+        self.__dofpts = np.array(self.__dofpts)
+
+
