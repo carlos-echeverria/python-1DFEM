@@ -16,7 +16,7 @@ class Mesh(object):
     def __init__(self,N,a,b):
         self.__size = N
         self.__mesh = np.linspace(a,b,N+1)
-        #self.__g  =  
+        #self.variable  = 10.  
 
     def size(self):
         """ access mesh size"""
@@ -24,22 +24,19 @@ class Mesh(object):
         
     def coordinates(self,n=None):
         if n==None:
-            mesh = self.__mesh
-            return mesh
+            return self.__mesh
         else:
-            mesh = self.__mesh[n-1]
-        return mesh
+            return self.__mesh[n]
 
     def cells(self,n=None):
-
+        assert(0 <= n < self.__size or n is None), 'cell index out of range'
        # g = lambda i: self.mesh[i:i+2]
-
         if n==None:
            # cells = np.zeros((self.size,2))
            # for i in range(self.size):
            #     cells[i,:] = g(i) 
            # return np.asarray([g(i) for i in range(self.size)])
-            return np.arange(1,self.size+1)
+            return np.arange(self.__size)
         else:
             #return g()
             return np.array([n,n+1])
@@ -147,11 +144,10 @@ class FiniteElement(object):
                in the mesh
         dofnos is an array of ints giving the numbers of the dofs
         """ 
-        # ojo is it mesh.size() or mesh..size
         assert(0 <= eltno < mesh.size()), 'element number is not part of domain'
         self.__eltno = eltno
         endnos = mesh.cells(eltno)
-        assert(len(endnos) == 2), 'end nos does not have 2 entries'
+        assert(len(endnos) == 2), 'endnos does not have 2 entries'
         self.__endpts = np.array(mesh.coordinates(endnos))
         self.__numDofs = sfns.size()
         assert(len(dofnos)==sfns.size())
@@ -160,14 +156,14 @@ class FiniteElement(object):
         self.__sfns = sfns
 
         # Gauss points and weights: 3-pts are enough?
-        self.__gausspts = np.array(\
+        self.__gausspts = np.array( \
                 (.112701665379258311482073460022, .5, .887298334620741688517926539978))
         self.__gausswts = np.array( (5.0/18.0, 8.0/18.0, 5.0/18.0) )
         # Generate an array fo shape functions evaluated at Gauss points
         self.__gaussvals = np.empty([self.__numDofs,self.__gausspts.size])
         for n in range(self.__numDofs):
             self.__gaussvals[n,:]=sfns.eval(n,self.__gausspts[:])
-
+        # can we pass the entire array to avoid the for loop?
 
         
     def endpts(self):
@@ -197,7 +193,7 @@ class FiniteElement(object):
         # evaluate
         return self.__sfns.eval(n,xi) * (xi >=0.) * (xi <= 1.)
 
-    def ddxl(self,n,x):
+    def ddx(self,n,x):
         """
         evaluate the n-th shape function derivative on this element at the
         spatial coordinate x
@@ -249,7 +245,7 @@ class FiniteElement(object):
 
 
 
-
+"""
 # snippet of code to test the Finite Element class
 N = 5
 rightpt = 5.0
@@ -286,3 +282,22 @@ if N == 5 and np.abs(coords[-1]-5.0) < 1.e-10:
             max(abs(elt.integral(ex,derivative=True)-[-1./6,-2./3,5./6]))
     print "integral(x**2,phi') err=", \
             max(abs(elt.integral(ex2,derivative=True)-[0,-2./3,2./3]))
+"""
+
+class FunctionSpace(object)
+    """
+    A FunctionSpace has a list of elements numbered and with coords according 
+    to mesh FunctionSpace(mesh,sfns): constructor, sfns is ShapeFuns
+    size(): number of elements
+    ndofs(): number of all dofs
+    dofpts(n=None): coordinates of dof[n] or all dofs
+    int_phi_phi(c=None,derivative=[False,False]):
+        integral(c*phi*phi) or
+        integral(c*dphi*phi) or
+        integral(c*dphi*dphi) or
+        integral(c*phi*dphi)
+    int_phi(f=None,derivative=False):
+        integral(f*phi) or
+        integral(f*dphi)
+    """
+    def __init__
