@@ -3,6 +3,7 @@ import numpy as np
 
 class Mesh(object):
     """
+    "hola"
     A mesh is a list of point global coordinates
     and a list of element definitions (by endpoint).
     This class defines a uniform mesh on an interval.
