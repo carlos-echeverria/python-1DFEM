@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg as la
 #if __name__ == '__main__':
 
 class Mesh(object):
@@ -284,7 +285,7 @@ if N == 5 and np.abs(coords[-1]-5.0) < 1.e-10:
             max(abs(elt.integral(ex2,derivative=True)-[0,-2./3,2./3]))
 """
 
-class FunctionSpace(object)
+class FunctionSpace(object):
     """
     A FunctionSpace has a list of elements numbered and with coords according 
     to mesh FunctionSpace(mesh,sfns): constructor, sfns is ShapeFuns
@@ -326,4 +327,136 @@ class FunctionSpace(object)
                 self.__dofpts.append(fe.dofpts()[i])
         self.__dofpts = np.array(self.__dofpts)
 
+    def size(self):
+        return len(self.__elts)
 
+    def Ndofs(self):
+        return self.__nDOFs
+
+    def dofpts(self,n=None):
+        if n == None:
+            return self.__dofpts
+        else:
+            return self.__dofpts[n]
+    
+    def int_phi_phi(self, c=None, derivative=[False,False]):
+        """
+        assemble $\int c(x)\phi(x) dx$ or with $d\phi/dx$
+        """
+        A = np.zeros([self.__nDOFs, self.__nDOFs])
+        # loop over elements
+        for elt in self.__elts:
+            d0=elt.dofnos()
+            if c != None:
+                cc = c[d0]
+            else:
+                cc = None
+            N = elt.numDofs()
+            endpts=elt.endpts()
+            L = endpts[1]-endpts[0] # length of element
+            for j in range(N):
+                if derivative[1]:
+                    #chain rule: d(xi)/d(x) = 1/L
+                    phi = elt.ddx(j,elt.dofpts())/L
+                else:
+                    phi = elt.eval(j,elt.dofpts())
+                A[d0,d0[j]] += elt.integral(phi,cc,derivative=derivative[0])
+            return A
+
+    def int_phi(self, f= None, derivative=False):
+        """
+        assemble $\int f(x)\phi(x) dx$ or with $d\phi/dx$
+        """
+        b = np.zeros([self.__nDOFs,1])
+        #loop over elements
+        for elt in self.__elts:
+            d0=elt.dofnos()
+            if f != None:
+                ff = f[d0]
+            else:
+                ff = None
+            N = elt.numDofs()
+            endpts=elt.endpts()
+            L = endpts[1]-endpts[0] # length of element
+            for j in range(N):
+                if derivative:
+                    #chain rule: d(xi)/d(x) = 1/L
+                    phi = elt.ddx(j,elt.dofpts())/L
+                else:
+                    phi = elt.eval(j,elt.dofpts())
+                b[d0,0] += elt.integral(phi,ff,derivative=derivative)
+            return b
+
+"""
+ snippet of code to test the Function Space class
+#One test case
+"""
+if __name__ == '__main__':
+
+    N = 5
+    rightpt = 5.0
+    print "\n\nFEM1Dclasses.py Test case, dx=",rightpt/N
+    mesh = Mesh(N,0.0,rightpt)
+    coords = mesh.coordinates()
+    if N==5:
+        print "mesh.coordinates()=",coords
+
+    # generate an element
+    sfns = Shapefns()
+    print "sfns.size()-3=",sfns.size()-3
+    xi = np.linspace(0,1,100)
+    import matplotlib.pyplot as plt
+    if False:
+        for n in range(3):
+            plt.plot(xi,sfns.eval(n,xi))
+            plt.show()
+            plt.plot(xi,sfns.ddx(n,xi))
+            plt.show()
+
+    elt = FiniteElement(mesh,sfns,0,[0,1,2])
+
+    if N==5 and np.abs(coords[-1]-5.0) < 1.e-10:
+        # test some integrals
+        print "elt integral() err=",max(abs(elt.integral()-[1./6,2./3,1./6]))
+        print "integral(deriv) err=",max(abs(elt.integral(derivative=True)- [-1,0,1]))
+
+        # test some more integrals
+        # pick the function f(x)=x, find its expansion coefs
+        ex = np.empty([sfns.size()])
+        ex[0] = elt.endpts()[0]
+        ex[2] = elt.endpts()[1]
+        ex[1] = .5*(ex[0]+ex[2])
+        ex2 = ex**2
+        print "integral(x) err=",max(abs(elt.integral(ex)-[0,1./3,1./6]))
+        print "integral(x**2) err=",max(abs(elt.integral(ex2)-[-1./60,1./5,3./20]))
+        print "integral(x**2) err=",max(abs(elt.integral(ex,ex)-[-1./60,1./5,3./20]))
+
+        print "integral(x,phi') err=",\
+              max(abs(elt.integral(ex,derivative=True)-[-1./6,-2./3,5./6]))
+        print "integral(x**2,phi') err=",\
+              max(abs(elt.integral(ex2,derivative=True)-[0,-2./3,2./3]))
+        print
+
+    V = FunctionSpace(mesh,sfns)
+    print "V.Ndofs()-correct=",V.Ndofs()-(2*N+1)
+    print "V.size()-correct=",V.size()-N
+
+    x = V.dofpts()
+    f = x.copy()
+    print "error in integral x over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]**2/2.
+    f = 0.0*x+1
+    print "error in integral 1 over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]
+    f = x.copy()**2
+    print "error in integral x**2 over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]**3/3.
+    f = x.copy()**3
+    print "error in integral x**3 over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]**4/4.
+    f = x.copy()**4
+    print "error in integral x**4 over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]**5/5.," should be nonzero."
+
+ #   print "norm(V.dofpts()-correct)=",\
+ #       la.norm(V.dofpts()-np.linspace(0,coords[-1],2*N+1))
