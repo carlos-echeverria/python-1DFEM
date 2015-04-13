@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg as la
 #if __name__ == '__main__':
 
 class Mesh(object):
@@ -111,7 +112,7 @@ class Shapefns(object):
             return self.__N
 
 """
-#snippet of code to test the previous code
+# Snippet of code to test the construction of shapefunctions
 
 N = 10
 rightpt = 1.0
@@ -139,7 +140,7 @@ class FiniteElement(object):
     def __init__(self,mesh,sfns,eltno,dofnos):
         """
         mesh is the mesh it is built on 
-        sfns is the Shapefuns member
+        sfns is a member of Shapefuns class
         eltno is this element's number
         endnos is a pair of ints giving the numbers of the endpoints 
                in the mesh
@@ -285,7 +286,7 @@ if N == 5 and np.abs(coords[-1]-5.0) < 1.e-10:
             max(abs(elt.integral(ex2,derivative=True)-[0,-2./3,2./3]))
 """
 
-class FunctionSpace(object)
+class FunctionSpace(object):
     """
     A FunctionSpace has a list of elements numbered and with coords according 
     to mesh FunctionSpace(mesh,sfns): constructor, sfns is ShapeFuns
@@ -301,4 +302,255 @@ class FunctionSpace(object)
         integral(f*phi) or
         integral(f*dphi)
     """
-    def __init__
+    def __init__(self, mesh,sfns):
+        """
+        mesh is a Mesh class
+        sfns is a Shapefns class
+        """
+        self.__size=mesh.size()
+        # number the elements in the same was as mesh
+        self.__elts = list([])
+        self.__dofpts = list([])
+        self.__nDOFs=0
+        for n in range(self.__size):
+            #ASSUMing only boundary points are number 0 and (self.__size)
+            if n==0:
+                self.__nDOFs += 3
+                dofs=[2*n, 2*n+1,2*n+2]
+                newdofs = range(3)
+            else:
+                self.__nDOFs +=2
+                dofs=[2*n, 2*n+1, 2*n+2]
+                newdofs = range(1,3)
+            fe = FiniteElement(mesh,sfns,n,dofs)
+            self.__elts.append(fe)
+            for i in newdofs:
+                self.__dofpts.append(fe.dofpts()[i])
+        self.__dofpts = np.array(self.__dofpts)
+
+    def size(self):
+        return len(self.__elts)
+
+    def Ndofs(self):
+        return self.__nDOFs
+
+    def dofpts(self,n=None):
+        if n == None:
+            return self.__dofpts
+        else:
+            return self.__dofpts[n]
+    
+    def int_phi_phi(self, c=None, derivative=[False,False]):
+        """
+        assemble $\int c(x)\phi(x) dx$ or with $d\phi/dx$
+        """
+        A = np.zeros([self.__nDOFs, self.__nDOFs])
+        # loop over elements
+        for elt in self.__elts:
+            d0=elt.dofnos()
+            if c != None:
+                cc = c[d0]
+            else:
+                cc = None
+            N = elt.numDofs()
+            endpts=elt.endpts()
+            L = endpts[1]-endpts[0] # length of element
+            for j in range(N):
+                if derivative[1]:
+                    #chain rule: d(xi)/d(x) = 1/L
+                    phi = elt.ddx(j,elt.dofpts())/L
+                else:
+                    phi = elt.eval(j,elt.dofpts())
+                A[d0,d0[j]] += elt.integral(phi,cc,derivative=derivative[0])
+        return A
+
+    def int_phi(self, f= None, derivative=False):
+        """
+        assemble $\int f(x)\phi(x) dx$ or with $d\phi/dx$
+        """
+        b = np.zeros([self.__nDOFs,1])
+        #loop over elements
+        for elt in self.__elts:
+            d0=elt.dofnos()
+            if f != None:
+                ff = f[d0]
+            else:
+                ff = None
+            N = elt.numDofs()
+            endpts=elt.endpts()
+            L = endpts[1]-endpts[0] # length of element
+            for j in range(N):
+                if derivative:
+                    #chain rule: d(xi)/d(x) = 1/L
+                    phi = elt.ddx(j,elt.dofpts())/L
+                else:
+                    phi = elt.eval(j,elt.dofpts())
+                b[d0,0] += elt.integral(phi,ff,derivative=derivative)
+        return b
+
+"""
+snippet of code to test the Function Space class
+"""
+if __name__ == '__main__':
+
+    N = 5
+    rightpt = 5.0
+    print "\n\nFEM1Dclasses.py Test case, dx=",rightpt/N
+    mesh = Mesh(N,0.0,rightpt)
+    coords = mesh.coordinates()
+    if N==5:
+        print "mesh.coordinates()=",coords
+
+    # generate an element
+    sfns = Shapefns()
+    print "sfns.size()-3=",sfns.size()-3
+    xi = np.linspace(0,1,100)
+    import matplotlib.pyplot as plt
+    if False:
+        for n in range(3):
+            plt.plot(xi,sfns.eval(n,xi))
+            plt.show()
+            plt.plot(xi,sfns.ddx(n,xi))
+            plt.show()
+
+    elt = FiniteElement(mesh,sfns,0,[0,1,2])
+
+    if N==5 and np.abs(coords[-1]-5.0) < 1.e-10:
+        # test some integrals
+        print "elt integral() err=",max(abs(elt.integral()-[1./6,2./3,1./6]))
+        print "integral(deriv) err=",max(abs(elt.integral(derivative=True)- [-1,0,1]))
+
+        # test some more integrals
+        # pick the function f(x)=x, find its expansion coefs
+        ex = np.empty([sfns.size()])
+        ex[0] = elt.endpts()[0]
+        ex[2] = elt.endpts()[1]
+        ex[1] = .5*(ex[0]+ex[2])
+        ex2 = ex**2
+        print "integral(x) err=",max(abs(elt.integral(ex)-[0,1./3,1./6]))
+        print "integral(x**2) err=",max(abs(elt.integral(ex2)-[-1./60,1./5,3./20]))
+        print "integral(x**2) err=",max(abs(elt.integral(ex,ex)-[-1./60,1./5,3./20]))
+
+        print "integral(x,phi') err=",\
+              max(abs(elt.integral(ex,derivative=True)-[-1./6,-2./3,5./6]))
+        print "integral(x**2,phi') err=",\
+              max(abs(elt.integral(ex2,derivative=True)-[0,-2./3,2./3]))
+        print
+
+    V = FunctionSpace(mesh,sfns)
+    print "V.Ndofs()-correct=",V.Ndofs()-(2*N+1)
+    print "V.size()-correct=",V.size()-N
+
+    x = V.dofpts()
+    f = x.copy()
+    print "error in integral x over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]**2/2.
+    f = 0.0*x+1
+    print "error in integral 1 over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]
+    f = x.copy()**2
+    print "error in integral x**2 over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]**3/3.
+    f = x.copy()**3
+    print "error in integral x**3 over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]**4/4.
+    f = x.copy()**4
+    print "error in integral x**4 over [",x[0],",",x[-1],"]=",\
+        np.sum(V.int_phi(f))-x[-1]**5/5.," should be nonzero."
+    print "norm(V.dofpts()-correct)=",\
+        la.norm(V.dofpts()-np.linspace(0,coords[-1],2*N+1))
+
+    # check eq \int \phi \phi * u = 1 gives 1 back (homog Neumann b.c.)
+    # generate matrix by assembling $A_{ij}=\int\phi_i\phi_j$
+    A = V.int_phi_phi()
+    if N ==5 and np.abs(coords[-1]-5.0) < 1.e-10:
+        print "error A00=",A[0,0]-2./15.
+        print "error A01=",A[0,1]-1./15.
+        print "error A02=",A[0,2]+1./30.
+        print "error A11=",A[1,1]-8./15.
+        print "error A12=",A[1,2]-1./15.
+        print
+        print "error A22=",A[2,2]-4./15.
+        print "error A23=",A[2,3]-1./15.
+        print "error A24=",A[2,4]+1./30.
+        print "error A33=",A[3,3]-8./15.
+        print "error A34=",A[3,4]-1./15.
+        print
+
+    Ndofs = V.Ndofs()
+    f = np.random.rand(Ndofs)
+    b = V.int_phi(f)
+    print "norm(A*f-b)=",la.norm(np.dot(A.transpose(),f)-b)
+
+    #trivial check with coefficient
+    c = np.ones([Ndofs])
+    A1 = V.int_phi_phi(c)
+    print "Norm difference matrices=",la.norm(A-A1)
+
+    # try putting a coefficient in: c(x) = (1+x)
+    # rhs = ones, soln = 1/(1+x)
+    c = (1.0+x)
+    B = V.int_phi_phi(c)
+    if N == 5 and np.abs(coords[-1]-5.0) < 1.e-10:
+        print "error B00=",B[0,0]-3./20.
+        print "error B01=",B[0,1]-1./15.
+        print "error B02=",B[0,2]+1./20.
+        print "error B11=",B[1,1]-12./15.
+        print "error B12=",B[1,2]-2./15.
+        print
+        print "error B22=",B[2,2]-8./15.
+        print "error B23=",B[2,3]-2./15.
+        print "error B24=",B[2,4]+1./12.
+        print "error B33=",B[3,3]-4./3.
+        print "error B34=",B[3,4]-3./15.
+
+    C = V.int_phi_phi(derivative=[True,True])
+    if N == 5 and np.abs(coords[-1]-5.0) < 1.e-10:
+        print "\n Laplace Matrix"
+        print "error C00*3=",C[0,0]-7./3.
+        print "error C01*3=",C[0,1]+8./3.
+        print "error C02*3=",C[0,2]-1./3.
+        print "error C11*3=",C[1,1]-16./3.
+        print "error C12*3=",C[1,2]+8./3.
+        print
+        print "error C22*3=",C[2,2]-14./3.
+        print "error C23*3=",C[2,3]+8./3.
+        print "error C24*3=",C[2,4]-1./3.
+        print "error C33*3=",C[3,3]-16./3.
+        print "error C34*3=",C[3,4]+8./3.
+        print
+
+    soln2 = np.ones([Ndofs])
+    b2 = np.dot(C,soln2)
+    print "const soln Laplace, norm check=",la.norm(b2)
+
+    soln = x
+    b0 = np.dot(C,soln)
+    rhs0 = V.int_phi(np.zeros([Ndofs]))
+    # natural b.c. not satisfied, don't check them
+    rhs0[0] = -b0[0]
+    rhs0[-1] = -b0[-1]
+    print "soln=x Laplace, norm check=",la.norm(rhs0+b0)
+
+    soln = x**2
+    b1 = np.dot(C,soln)
+    rhs1 = V.int_phi(2.0*np.ones([Ndofs]))
+    # natural b.c. not satisfied on right, don't check it 
+    rhs1[-1] = -b1[-1]
+    print "soln=x**2 Laplace, norm check=",la.norm(rhs1+b1)
+
+    D = V.int_phi_phi(derivative=[False,True])
+    soln = np.ones([V.Ndofs()])
+    b2 = np.dot(D,soln)
+    print "norm check (rhs d/dx+Neumann, const soln)=",la.norm(b2)
+
+    D[0,0] = 1.0
+    D[0,1:] = 0.0
+    D[-1,-1] = 1.0
+    D[-1,0:-1] = 0.0
+    soln = x
+    b3 = np.dot(D,soln)
+    rhs3 = V.int_phi(np.ones([Ndofs]))
+    rhs3[0] = soln[0]
+    rhs3[-1] = soln[-1]
+    print "norm check (d/dx+Dirichlet soln=x)=",la.norm(rhs3-b3) 
