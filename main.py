@@ -160,7 +160,7 @@ class FiniteElement(object):
         self.__gausspts = np.array( \
                 (.112701665379258311482073460022, .5, .887298334620741688517926539978))
         self.__gausswts = np.array( (5.0/18.0, 8.0/18.0, 5.0/18.0) )
-        # Generate an array fo shape functions evaluated at Gauss points
+        # Generate an array for shape functions evaluated at Gauss points
         self.__gaussvals = np.empty([self.__numDofs,self.__gausspts.size])
         for n in range(self.__numDofs):
             self.__gaussvals[n,:]=sfns.eval(n,self.__gausspts[:])
